@@ -1,0 +1,28 @@
+services:
+  core-app:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+      target: development
+    volumes:
+      - ./core/src:/app/src:ro
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "${CORE_PORT:-3000}:3000"
+
+  doc-worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+      target: development
+    volumes:
+      - ./worker/app:/app/app:ro
+    environment:
+      - DEBUG=true
+    ports:
+      - "${WORKER_PORT:-8000}:8000"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"

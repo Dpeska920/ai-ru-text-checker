@@ -1,0 +1,99 @@
+
+services:
+  core-app:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+    container_name: redpen-core
+    ports:
+      - "${CORE_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=3000
+      - HOST=0.0.0.0
+      - TG_TOKEN=${TG_TOKEN}
+      - TG_WHITELIST_IDS=${TG_WHITELIST_IDS:-}
+      - TG_WHITELIST_USERNAMES=${TG_WHITELIST_USERNAMES:-}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - WORKER_URL=http://doc-worker:8000
+      - REDIS_URL=redis://redis:6379
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-searxng}
+      - SEARXNG_URL=http://searxng:8080
+      - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY:-}
+    depends_on:
+      doc-worker:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - redpen-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  doc-worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: redpen-worker
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=${WORKER_DEBUG:-false}
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-10}
+    restart: unless-stopped
+    networks:
+      - redpen-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: redpen-searxng
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    restart: unless-stopped
+    networks:
+      - redpen-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:8-alpine
+    container_name: redpen-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - redpen-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  redpen-network:
+    driver: bridge
+
+volumes:
+  redis_data:
